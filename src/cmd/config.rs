@@ -8,7 +8,10 @@ use directories::ProjectDirs;
 use tokio::fs;
 use tracing::{info, warn};
 
-use crate::{git, EmojiFormat, Error, GitmojiConfig, LocalGitmojiConfig, Result, DEFAULT_URL};
+use crate::{
+    git, CommitSpecification, EmojiFormat, Error, GitmojiConfig, LocalGitmojiConfig, Result,
+    DEFAULT_URL,
+};
 
 const CONFIG_FILE: &str = "gitmojis.toml";
 const CONFIG_LOCAL_FILE: &str = "./.gitmojis.toml";
@@ -16,6 +19,19 @@ const GIT_CONFIG_LOCAL_FILE: &str = "gitmoji.file";
 const DIR_QUALIFIER: &str = "com.github";
 const DIR_ORGANIZATION: &str = "ilaborie";
 const DIR_APPLICATION: &str = "gitmoji-rs";
+
+#[derive(Debug, Clone)]
+struct SpecificationItem<'d> {
+    name: &'d str,
+    value: CommitSpecification,
+}
+
+impl Display for SpecificationItem<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct FormatItem<'d> {
     name: &'d str,
@@ -27,6 +43,17 @@ impl Display for FormatItem<'_> {
         write!(f, "{}", self.name)
     }
 }
+
+const SPECIFICATION_ITEMS: &[SpecificationItem<'static>] = &[
+    SpecificationItem {
+        name: "default",
+        value: CommitSpecification::Default,
+    },
+    SpecificationItem {
+        name: "Conventional Emoji Commits",
+        value: CommitSpecification::ConventionalEmojiCommits,
+    },
+];
 
 const FORMAT_ITEMS: &[FormatItem<'static>] = &[
     FormatItem {
@@ -45,6 +72,13 @@ pub fn create_config(term: &Term) -> Result<GitmojiConfig> {
         .with_prompt(r#"Enable automatic "git add .""#)
         .default(false)
         .interact_on(term)?;
+
+    let specification_idx = Select::with_theme(&theme)
+        .with_prompt("Select the commit specification")
+        .default(0)
+        .items(SPECIFICATION_ITEMS)
+        .interact_on(term)?;
+    let specification = SPECIFICATION_ITEMS[specification_idx].value;
 
     let format_idx = Select::with_theme(&theme)
         .with_prompt("Select how emojis should be used in commits")
@@ -70,7 +104,7 @@ pub fn create_config(term: &Term) -> Result<GitmojiConfig> {
         .interact_text_on(term)?
         .parse()?;
 
-    let config = GitmojiConfig::new(auto_add, format, signed, scope, update_url);
+    let config = GitmojiConfig::new(auto_add, specification, format, signed, scope, update_url);
     Ok(config)
 }
 

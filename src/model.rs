@@ -6,6 +6,19 @@ use url::Url;
 
 /// The default URL used for update
 pub const DEFAULT_URL: &str = "https://gitmoji.dev/api/gitmojis";
+/// The default url for conventional commits data
+pub const CONVENTIONAL_EMOJI_COMMITS_URL: &str = "";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// The commit specification
+pub enum CommitSpecification {
+    /// The default gitmoji format
+    Default,
+    /// Conventional Commits Format
+    ConventionalCommits,
+    /// Conventional Emoji Format
+    ConventionalEmojiCommits,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 /// The emoji format
@@ -21,6 +34,7 @@ pub enum EmojiFormat {
 /// The Gitmojis configuration
 pub struct GitmojiConfig {
     auto_add: bool,
+    specification: CommitSpecification,
     format: EmojiFormat,
     signed: bool,
     scope: bool,
@@ -35,6 +49,7 @@ impl GitmojiConfig {
     #[must_use]
     pub const fn new(
         auto_add: bool,
+        specification: CommitSpecification,
         format: EmojiFormat,
         signed: bool,
         scope: bool,
@@ -42,6 +57,7 @@ impl GitmojiConfig {
     ) -> Self {
         Self {
             auto_add,
+            specification,
             format,
             signed,
             scope,
@@ -125,6 +141,7 @@ impl Default for GitmojiConfig {
     fn default() -> Self {
         Self {
             auto_add: false,
+            specification: CommitSpecification::Default,
             format: EmojiFormat::UseCode,
             signed: false,
             scope: false,
@@ -139,6 +156,7 @@ impl Default for GitmojiConfig {
 /// The local gitmoji configuration
 pub struct LocalGitmojiConfig {
     auto_add: Option<bool>,
+    specification: Option<CommitSpecification>,
     format: Option<EmojiFormat>,
     signed: Option<bool>,
     scope: Option<bool>,
@@ -150,6 +168,12 @@ impl LocalGitmojiConfig {
     #[must_use]
     pub fn auto_add(&self) -> Option<bool> {
         self.auto_add
+    }
+
+    /// The specification of gitmoji
+    #[must_use]
+    pub fn specification(&self) -> Option<CommitSpecification> {
+        self.specification
     }
 
     /// The format of gitmoji (code or emoji)
