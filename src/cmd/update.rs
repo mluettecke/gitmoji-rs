@@ -1,26 +1,50 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 use tracing::{debug, info};
 
 use super::write_config;
 use crate::model::GitmojiConfig;
-use crate::{Gitmoji, Result};
+use crate::{ConventionalEmojiCommit, Gitmoji, Result};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 struct GetGitmojis {
     gitmojis: Vec<Gitmoji>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+struct GetConventionalEmojiCommitsTypes {
+    types: HashMap<String, ConventionalEmojiCommit>,
+}
+
 async fn get_gitmojis(url: &str) -> Result<GetGitmojis> {
     info!("Update gitmojis with {url}");
     let result = reqwest::get(url).await?.json::<GetGitmojis>().await?;
     debug!("Found {} gitmojis", result.gitmojis.len());
+    Ok(result)
+}
 
+async fn get_conventional_commit_emojis(url: &str) -> Result<GetConventionalEmojiCommitsTypes> {
+    info!("Update conventional emoji commits with {url}");
+    let result = reqwest::get(url)
+        .await?
+        .json::<GetConventionalEmojiCommitsTypes>()
+        .await?;
+    debug!("Found {} conventional emoji commits", result.types.len());
     Ok(result)
 }
 
 pub async fn update_gitmojis(mut config: GitmojiConfig) -> Result<GitmojiConfig> {
     let result = get_gitmojis(config.update_url()).await?;
     config.set_gitmojis(result.gitmojis);
+    write_config(&config).await?;
+
+    Ok(config)
+}
+
+pub async fn update_conventional_emoji_commits(mut config: GitmojiConfig) -> Result<GitmojiConfig> {
+    let result = get_conventional_commit_emojis(config.update_url()).await?;
+    config.set_conventional_commit_emojis(result.types);
     write_config(&config).await?;
 
     Ok(config)

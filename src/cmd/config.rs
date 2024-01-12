@@ -10,7 +10,7 @@ use tracing::{info, warn};
 
 use crate::{
     git, CommitSpecification, EmojiFormat, Error, GitmojiConfig, LocalGitmojiConfig, Result,
-    DEFAULT_URL,
+    DEFAULT_URL, CONVENTIONAL_EMOJI_COMMITS_DEFAULT_URL
 };
 
 const CONFIG_FILE: &str = "gitmojis.toml";
@@ -87,19 +87,29 @@ pub fn create_config(term: &Term) -> Result<GitmojiConfig> {
         .interact_on(term)?;
     let format = FORMAT_ITEMS[format_idx].value;
 
+
     let signed = Confirm::with_theme(&theme)
         .with_prompt("Enable signed commits")
         .default(false)
         .interact_on(term)?;
 
-    let scope = Confirm::with_theme(&theme)
-        .with_prompt("Enable scope prompt")
-        .default(false)
-        .interact_on(term)?;
+    let scope = match specification {
+        CommitSpecification::Default => {
+            Confirm::with_theme(&theme)
+            .with_prompt("Enable scope prompt")
+            .default(false)
+            .interact_on(term)?
+        },
+        CommitSpecification::ConventionalEmojiCommits => {true}
+    };
 
+    let default_url = match specification {
+        CommitSpecification::Default => DEFAULT_URL,
+        CommitSpecification::ConventionalEmojiCommits => CONVENTIONAL_EMOJI_COMMITS_DEFAULT_URL
+    };
     let update_url = Input::with_theme(&theme)
         .with_prompt("Set gitmojis api url")
-        .default(DEFAULT_URL.to_string())
+        .default(default_url.to_string())
         .validate_with(validate_url)
         .interact_text_on(term)?
         .parse()?;

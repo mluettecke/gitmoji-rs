@@ -1,4 +1,7 @@
-use std::fmt::{self, Display};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+};
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -7,15 +10,13 @@ use url::Url;
 /// The default URL used for update
 pub const DEFAULT_URL: &str = "https://gitmoji.dev/api/gitmojis";
 /// The default url for conventional commits data
-pub const CONVENTIONAL_EMOJI_COMMITS_URL: &str = "";
+pub const CONVENTIONAL_EMOJI_COMMITS_DEFAULT_URL: &str = "https://gist.githubusercontent.com/mluettecke/3f84a6a5c1c53ff6412828e601cd60ca/raw/9390c31c733ded384f65d37e063e041075016cdc/conventional-emoji-commits-types.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 /// The commit specification
 pub enum CommitSpecification {
     /// The default gitmoji format
     Default,
-    /// Conventional Commits Format
-    ConventionalCommits,
     /// Conventional Emoji Format
     ConventionalEmojiCommits,
 }
@@ -42,6 +43,7 @@ pub struct GitmojiConfig {
     #[serde(with = "time::serde::iso8601::option")]
     last_update: Option<OffsetDateTime>,
     gitmojis: Vec<Gitmoji>,
+    conventional_commit_emojis: Vec<ConventionalEmojiCommit>,
 }
 
 impl GitmojiConfig {
@@ -64,6 +66,7 @@ impl GitmojiConfig {
             update_url,
             last_update: None,
             gitmojis: vec![],
+            conventional_commit_emojis: vec![],
         }
     }
 
@@ -81,12 +84,21 @@ impl GitmojiConfig {
         if let Some(gitmojis) = local_config.gitmojis() {
             self.gitmojis = gitmojis.to_vec();
         }
+        if let Some(conventional_commit_emoji) = local_config.conventional_commit_emojis() {
+            self.conventional_commit_emojis = conventional_commit_emoji.to_vec();
+        }
     }
 
     /// If the "--all" is added to commit command
     #[must_use]
     pub const fn auto_add(&self) -> bool {
         self.auto_add
+    }
+
+    /// The commit specification
+    #[must_use]
+    pub const fn specification(&self) -> CommitSpecification {
+        self.specification
     }
 
     /// The format of gitmoji (code or emoji)
@@ -135,6 +147,29 @@ impl GitmojiConfig {
         self.last_update = Some(OffsetDateTime::now_utc());
         self.gitmojis = gitmojis;
     }
+
+    /// The gitmoji list
+    #[must_use]
+    pub fn conventional_commit_emojis(&self) -> &[ConventionalEmojiCommit] {
+        self.conventional_commit_emojis.as_ref()
+    }
+
+    /// Set conventional commit emojis
+    pub fn set_conventional_commit_emojis(
+        &mut self,
+        conventional_commit_emojis: HashMap<String, ConventionalEmojiCommit>,
+    ) {
+        self.last_update = Some(OffsetDateTime::now_utc());
+        self.conventional_commit_emojis = conventional_commit_emojis
+            .into_iter()
+            .map(|(r#type, value)| ConventionalEmojiCommit {
+                r#type: r#type,
+                code: value.code,
+                description: value.description,
+                emoji: value.emoji,
+            })
+            .collect();
+    }
 }
 
 impl Default for GitmojiConfig {
@@ -148,6 +183,7 @@ impl Default for GitmojiConfig {
             update_url: DEFAULT_URL.parse().expect("It's a valid URL"),
             last_update: None,
             gitmojis: vec![],
+            conventional_commit_emojis: vec![],
         }
     }
 }
@@ -161,6 +197,7 @@ pub struct LocalGitmojiConfig {
     signed: Option<bool>,
     scope: Option<bool>,
     gitmojis: Option<Vec<Gitmoji>>,
+    conventional_commit_emojis: Option<Vec<ConventionalEmojiCommit>>,
 }
 
 impl LocalGitmojiConfig {
@@ -198,6 +235,12 @@ impl LocalGitmojiConfig {
     #[must_use]
     pub fn gitmojis(&self) -> Option<&[Gitmoji]> {
         self.gitmojis.as_deref()
+    }
+
+    /// The conventional emoji commits list
+    #[must_use]
+    pub fn conventional_commit_emojis(&self) -> Option<&[ConventionalEmojiCommit]> {
+        self.conventional_commit_emojis.as_deref()
     }
 }
 
@@ -265,6 +308,69 @@ impl Display for Gitmoji {
             f,
             "{emoji} {code} {} - {}",
             name.as_deref().unwrap_or_default(),
+            description.as_deref().unwrap_or_default()
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A Conventional Commit Emoji
+pub struct ConventionalEmojiCommit {
+    emoji: String,
+    code: String,
+    r#type: String,
+    description: Option<String>,
+}
+
+impl ConventionalEmojiCommit {
+    /// Create a conventional commit emoji
+    #[must_use]
+    pub fn new(emoji: String, code: String, r#type: String, description: Option<String>) -> Self {
+        Self {
+            emoji,
+            code,
+            r#type,
+            description,
+        }
+    }
+
+    /// The emoji
+    #[must_use]
+    pub fn emoji(&self) -> &str {
+        self.emoji.as_ref()
+    }
+
+    /// The associated code
+    #[must_use]
+    pub fn code(&self) -> &str {
+        self.code.as_ref()
+    }
+
+    /// The type
+    #[must_use]
+    pub fn r#type(&self) -> &str {
+        self.r#type.as_str()
+    }
+
+    /// The description
+    #[must_use]
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+}
+
+impl Display for ConventionalEmojiCommit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ConventionalEmojiCommit {
+            emoji,
+            r#type,
+            description,
+            ..
+        } = self;
+        write!(
+            f,
+            "{emoji} {} - {}",
+            r#type.as_str(),
             description.as_deref().unwrap_or_default()
         )
     }

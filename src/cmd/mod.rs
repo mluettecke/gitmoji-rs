@@ -5,7 +5,10 @@ use tracing::{info, warn};
 use url::Url;
 
 use crate::git::has_staged_changes;
-use crate::{git, EmojiFormat, Error, GitmojiConfig, Result, EXIT_CANNOT_UPDATE, EXIT_NO_CONFIG};
+use crate::{
+    git, CommitSpecification, EmojiFormat, Error, GitmojiConfig, Result, EXIT_CANNOT_UPDATE,
+    EXIT_NO_CONFIG,
+};
 
 mod commit;
 mod config;
@@ -19,9 +22,9 @@ pub use self::commit::*;
 pub use self::config::*;
 #[cfg(feature = "hook")]
 pub use self::hook::*;
-use self::list::print_gitmojis;
+use self::list::{print_conventional_commit_emojis, print_gitmojis};
 use self::search::filter;
-use self::update::update_gitmojis;
+use self::update::{update_conventional_emoji_commits, update_gitmojis};
 
 async fn get_config_or_stop() -> GitmojiConfig {
     match read_config_or_fail().await {
@@ -36,12 +39,25 @@ async fn get_config_or_stop() -> GitmojiConfig {
 
 async fn update_config_or_stop(config: GitmojiConfig) -> GitmojiConfig {
     let url = config.update_url().to_string();
-    match update_gitmojis(config).await {
-        Ok(config) => config,
-        Err(err) => {
-            warn!("Oops, cannot update the config because {err}");
-            eprintln!("⚠️  Configuration not updated, maybe check the update url '{url}'");
-            exit(EXIT_CANNOT_UPDATE)
+    match config.specification() {
+        CommitSpecification::Default => match update_gitmojis(config).await {
+            Ok(config) => config,
+            Err(err) => {
+                warn!("Oops, cannot update the config because {err}");
+                eprintln!("⚠️  Configuration not updated, maybe check the update url '{url}'");
+                exit(EXIT_CANNOT_UPDATE)
+            }
+        },
+        CommitSpecification::ConventionalEmojiCommits => {
+            match update_conventional_emoji_commits(config).await {
+                Ok(config) => config,
+                Err(err) => {
+                    println!("{:?}", err);
+                    warn!("Oops, cannot update the config because {err}");
+                    eprintln!("⚠️  Configuration not updated, maybe check the update url '{url}'");
+                    exit(EXIT_CANNOT_UPDATE)
+                }
+            }
         }
     }
 }
@@ -57,25 +73,54 @@ async fn ask_commit_title_description(
     config: &GitmojiConfig,
     term: &Term,
 ) -> Result<CommitTitleDescription> {
-    let CommitParams {
-        gitmoji,
-        scope,
-        title,
-        description,
-    } = get_commit_params(config, term)?;
+    match config.specification() {
+        CommitSpecification::Default => {
+            let DefaultCommitParams {
+                gitmoji,
+                scope,
+                title,
+                description,
+            } = get_default_commit_params(config, term)?;
+            let gitmoji = match config.format() {
+                EmojiFormat::UseCode => gitmoji.code(),
+                EmojiFormat::UseEmoji => gitmoji.emoji(),
+            };
 
-    let gitmoji = match config.format() {
-        EmojiFormat::UseCode => gitmoji.code(),
-        EmojiFormat::UseEmoji => gitmoji.emoji(),
-    };
+            let title = match config.specification() {
+                CommitSpecification::Default => scope.map_or_else(
+                    || format!("{gitmoji} {title}"),
+                    |scope| format!("{gitmoji} {scope}{title}"),
+                ),
+                CommitSpecification::ConventionalEmojiCommits => scope.map_or_else(
+                    || format!("{gitmoji} {title}"),
+                    |scope| format!("{gitmoji} {scope}{title}"),
+                ),
+            };
 
-    let title = scope.map_or_else(
-        || format!("{gitmoji} {title}"),
-        |scope| format!("{gitmoji} {scope}{title}"),
-    );
+            let result = CommitTitleDescription { title, description };
+            Ok(result)
+        }
+        CommitSpecification::ConventionalEmojiCommits => {
+            let ConventionalEmojiCommitParams {
+                description,
+                emoji,
+                scope,
+                title,
+                type_name,
+            } = get_conventional_emoji_commit_params(config, term)?;
+            let emoji = match config.format() {
+                EmojiFormat::UseCode => emoji.code(),
+                EmojiFormat::UseEmoji => emoji.emoji(),
+            };
+            let title = scope.map_or_else(
+                || format!("{emoji}{type_name}: {title}"),
+                |scope| format!("{emoji}{type_name}({scope}): {title}"),
+            );
+            let result = CommitTitleDescription { title, description };
 
-    let result = CommitTitleDescription { title, description };
-    Ok(result)
+            Ok(result)
+        }
+    }
 }
 
 /// Commit using Gitmoji
@@ -126,7 +171,14 @@ pub async fn search(text: &str) -> Result<()> {
 #[tracing::instrument]
 pub async fn list() -> Result<()> {
     let config = get_config_or_stop().await;
-    print_gitmojis(config.gitmojis());
+    match config.specification() {
+        CommitSpecification::ConventionalEmojiCommits => {
+            print_conventional_commit_emojis(config.conventional_commit_emojis());
+        }
+        CommitSpecification::Default => {
+            print_gitmojis(config.gitmojis());
+        }
+    }
     Ok(())
 }
 
