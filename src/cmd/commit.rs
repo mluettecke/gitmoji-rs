@@ -88,7 +88,7 @@ pub fn get_conventional_emoji_commit_params(
         .nth(gitmoji_idx)
         .expect("Should be in bounds")
         .clone();
-
+    let type_name = emoji.clone().r#type().to_string();
     let scope = if config.scope() {
         // TODO: [#2] add an history
         let scope = Input::with_theme(&theme)
@@ -119,7 +119,7 @@ pub fn get_conventional_emoji_commit_params(
         scope,
         title,
         description,
-        type_name: "yoo".to_owned(),
+        type_name,
     };
     Ok(result)
 }
