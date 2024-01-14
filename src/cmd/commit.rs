@@ -90,10 +90,9 @@ pub fn get_conventional_emoji_commit_params(
         .clone();
     let type_name = emoji.clone().r#type().to_string();
     let scope = if config.scope() {
-        // TODO: [#2] add an history
         let scope = Input::with_theme(&theme)
             .with_prompt("Enter the scope of current changes:")
-            .default("*".to_string())
+            .allow_empty(true)
             .interact_text_on(term)?;
         Some(scope)
     } else {

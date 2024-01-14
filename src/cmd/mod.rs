@@ -112,10 +112,14 @@ async fn ask_commit_title_description(
                 EmojiFormat::UseCode => emoji.code(),
                 EmojiFormat::UseEmoji => emoji.emoji(),
             };
-            let title = scope.map_or_else(
-                || format!("{emoji}{type_name}: {title}"),
-                |scope| format!("{emoji}{type_name}({scope}): {title}"),
-            );
+            let title = match scope {
+                Some(value) if !value.is_empty() => {
+                    format!("{emoji}{type_name}({value}): {title}")
+                }
+                Some(_) | None => {
+                    format!("{emoji}{type_name}: {title}")
+                }
+            };
             let result = CommitTitleDescription { title, description };
 
             Ok(result)
